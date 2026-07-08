@@ -226,6 +226,7 @@ export const WorkspaceScreen = () => {
   const [systemInfoOpen, setSystemInfoOpen] = useState(false);
   const [syncQueueOpen, setSyncQueueOpen] = useState(false);
   const [revisionMemo, setRevisionMemo] = useState<MemoDetail | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMemoIds, setSelectedMemoIds] = useState<Set<string>>(() => new Set());
   const [selectionMoveOpen, setSelectionMoveOpen] = useState(false);
   const [syncQueueSummary, setSyncQueueSummary] = useState<MobileSyncQueueSummary>(() => emptyMobileSyncQueueSummary());
@@ -306,7 +307,7 @@ export const WorkspaceScreen = () => {
   };
 
   const handleMemoPress = (memoId: string) => {
-    if (selectedMemoIds.size > 0) {
+    if (selectionMode) {
       toggleSelectedMemo(memoId);
       return;
     }
@@ -315,6 +316,7 @@ export const WorkspaceScreen = () => {
   };
 
   const toggleSelectedMemo = (memoId: string) => {
+    setSelectionMode(true);
     setSelectedMemoIds((current) => {
       const next = new Set(current);
 
@@ -329,8 +331,13 @@ export const WorkspaceScreen = () => {
   };
 
   const clearSelection = () => {
+    setSelectionMode(false);
     setSelectedMemoIds(new Set());
     setSelectionMoveOpen(false);
+  };
+
+  const enterSelectionMode = () => {
+    setSelectionMode(true);
   };
 
   const closeDetail = () => {
@@ -892,6 +899,10 @@ export const WorkspaceScreen = () => {
       <NotesActionsModal
         memoView={memoView}
         onClose={() => setNotesActionsOpen(false)}
+        onEnterSelection={() => {
+          setNotesActionsOpen(false);
+          enterSelectionMode();
+        }}
         onOpenApiTokens={() => {
           setNotesActionsOpen(false);
           setApiTokensOpen(true);
@@ -911,10 +922,10 @@ export const WorkspaceScreen = () => {
         visible={notesActionsOpen}
       />
 
-      {activeView === "notes" && selectedMemoIds.size > 0 ? (
+      {activeView === "notes" && selectionMode ? (
         <SelectionActionBar
           canMerge={memoView !== "trash" && selectedMemoIds.size >= 2}
-          canMove={memoView !== "trash"}
+          canMove={memoView !== "trash" && selectedMemoIds.size > 0}
           isBusy={deleteMemosMutation.isPending || moveMemosMutation.isPending || pinMemosMutation.isPending || mergeMemosMutation.isPending}
           isTrashView={memoView === "trash"}
           onClear={clearSelection}
@@ -1130,6 +1141,7 @@ const NotesView = ({
 const NotesActionsModal = ({
   memoView,
   onClose,
+  onEnterSelection,
   onOpenApiTokens,
   onOpenResources,
   onOpenTags,
@@ -1138,6 +1150,7 @@ const NotesActionsModal = ({
 }: {
   memoView: MemoView;
   onClose: () => void;
+  onEnterSelection: () => void;
   onOpenApiTokens: () => void;
   onOpenResources: () => void;
   onOpenTags: () => void;
@@ -1149,6 +1162,7 @@ const NotesActionsModal = ({
       <Pressable style={styles.actionSheet}>
         <View style={styles.actionSheetHandle} />
         <Text style={styles.actionSheetTitle}>列表操作</Text>
+        <ActionSheetItem icon={<CheckSquare color="#0f172a" size={18} />} label="选择笔记" onPress={onEnterSelection} />
         <ActionSheetItem icon={<Tag color="#0f172a" size={18} />} label="标签管理" onPress={onOpenTags} />
         <ActionSheetItem icon={<Archive color="#0f172a" size={18} />} label="资源库" onPress={onOpenResources} />
         <ActionSheetItem
@@ -3677,9 +3691,9 @@ const SelectionActionBar = ({
     </View>
     <View style={styles.selectionActions}>
       <SelectionAction disabled={isBusy || !canMove} icon={<Folder color={canMove ? "#0f172a" : "#cbd5e1"} size={18} />} label="移动" onPress={onMove} />
-      <SelectionAction disabled={isBusy || isTrashView} icon={<Pin color={isTrashView ? "#cbd5e1" : "#0f172a"} size={18} />} label={pinLabel} onPress={onPin} />
+      <SelectionAction disabled={isBusy || isTrashView || selectedCount === 0} icon={<Pin color={isTrashView || selectedCount === 0 ? "#cbd5e1" : "#0f172a"} size={18} />} label={pinLabel} onPress={onPin} />
       <SelectionAction disabled={isBusy || !canMerge} icon={<Merge color={canMerge ? "#0f172a" : "#cbd5e1"} size={18} />} label="合并" onPress={onMerge} />
-      <SelectionAction danger disabled={isBusy} icon={<Trash2 color="#b91c1c" size={18} />} label={isTrashView ? "永久删除" : "删除"} onPress={onDelete} />
+      <SelectionAction danger disabled={isBusy || selectedCount === 0} icon={<Trash2 color={selectedCount === 0 ? "#cbd5e1" : "#b91c1c"} size={18} />} label={isTrashView ? "永久删除" : "删除"} onPress={onDelete} />
     </View>
   </View>
 );
