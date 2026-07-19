@@ -78,6 +78,7 @@ import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import Markdown, { type RenderRules } from "react-native-markdown-display";
 import { SvgXml } from "react-native-svg";
 import { buildRevisionDiffRows, createExcerpt, docToMarkdown, docToText, getNotebookDescendantIds, markdownToDoc, type ApiToken, type AuthUser, type MemoDetail, type MemoRevision, type MemoSummary, type Notebook, type ResourceListItem, type RevisionDiffRow, type TagSummary, type TiptapDoc } from "@edgeever/shared";
+import { MOBILE_UI_METRICS, toggleMobileMemoFilterMode } from "@edgeever/shared/mobile-ui";
 import { clearMobileMemoDraft, clearMobileNewMemoDraft, readMobileMemoDraft, readMobileNewMemoDraft, writeMobileMemoDraft, writeMobileNewMemoDraft, type MobileMemoDraft } from "../lib/mobile-drafts";
 import {
   readMobileImageCompressionEnabled,
@@ -1033,9 +1034,9 @@ export const WorkspaceScreen = () => {
           }}
           onSetMemoView={(nextMemoView) => nextMemoView === "trash" ? showTrash() : showAllNotes()}
           searchText={searchText}
-          searchTotalCount={searchActive
+          totalMemoCount={searchActive
             ? searchQuery.data?.pages[0]?.totalCount ?? searchResults.length
-            : 0}
+            : memosQuery.data?.pages[0]?.totalCount ?? memos.length}
           selectionMode={selectionMode}
           selectedMemoIds={selectedMemoIds}
           error={searchActive ? searchQuery.error : memosQuery.error}
@@ -1203,7 +1204,7 @@ export const WorkspaceScreen = () => {
 
       {activeView !== "settings" && !selectionMode ? (
         <View
-          style={[styles.bottomNav, { height: 52 + safeAreaInsets.bottom, paddingBottom: safeAreaInsets.bottom }]}
+          style={[styles.bottomNav, { height: MOBILE_UI_METRICS.bottomNavigationHeight + safeAreaInsets.bottom, paddingBottom: safeAreaInsets.bottom }]}
         >
         <BottomNavItem
           active={activeView === "notes"}
@@ -1256,7 +1257,7 @@ const NotesView = ({
   onSearchTextChange,
   onSetMemoView,
   searchText,
-  searchTotalCount,
+  totalMemoCount,
   selectedMemoIds,
   selectionMode,
 }: {
@@ -1283,17 +1284,27 @@ const NotesView = ({
   onSearchTextChange: (value: string) => void;
   onSetMemoView: (memoView: MemoView) => void;
   searchText: string;
-  searchTotalCount: number;
+  totalMemoCount: number;
   selectionMode: boolean;
   selectedMemoIds: Set<string>;
 }) => {
   const { resolvedTheme } = useMobileTheme();
   const localePreference = useMobileLocalePreference();
   const searchActive = searchText.trim().length > 0;
+  const filterActive = memoFilterMode !== "all";
   const englishLocale = isEnglishMobileLocale(localePreference);
   const searchStatusLabel = englishLocale ? "Searching" : "正在搜索";
-  const searchResultLabel = englishLocale ? `${searchTotalCount} ${searchTotalCount === 1 ? "result" : "results"}` : `${searchTotalCount} 条结果`;
+  const searchResultLabel = englishLocale ? `${totalMemoCount} ${totalMemoCount === 1 ? "result" : "results"}` : `${totalMemoCount} 条结果`;
   const exitSearchLabel = englishLocale ? "Exit search" : "退出搜索";
+  const activeFilterLabel = memoFilterMode === "pinned"
+    ? (englishLocale ? "Pinned" : "置顶")
+    : memoFilterMode === "tagged"
+      ? (englishLocale ? "Tagged" : "有标签")
+      : (englishLocale ? "Untagged" : "无标签");
+  const filterResultLabel = englishLocale
+    ? `Filter: ${activeFilterLabel} · ${totalMemoCount} ${totalMemoCount === 1 ? "note" : "notes"}`
+    : `筛选：${activeFilterLabel} · ${totalMemoCount} 条`;
+  const resetFilterLabel = englishLocale ? "Reset" : "重置";
 
   return (
     <View style={styles.viewBody}>
@@ -1350,30 +1361,40 @@ const NotesView = ({
                 active={memoFilterMode === "pinned"}
                 icon={<Sparkles color={memoFilterMode === "pinned" ? "#ffffff" : "#475569"} size={18} />}
                 label="置顶"
-                onPress={() => onFilterModeChange(memoFilterMode === "pinned" ? "all" : "pinned")}
+                onPress={() => onFilterModeChange(toggleMobileMemoFilterMode(memoFilterMode, "pinned"))}
               />
               <MobileFilterButton
                 active={memoFilterMode === "tagged"}
                 icon={<Tag color={memoFilterMode === "tagged" ? "#ffffff" : "#475569"} size={18} />}
                 label="有标签"
-                onPress={() => onFilterModeChange(memoFilterMode === "tagged" ? "all" : "tagged")}
+                onPress={() => onFilterModeChange(toggleMobileMemoFilterMode(memoFilterMode, "tagged"))}
               />
               <MobileFilterButton
                 active={memoFilterMode === "untagged"}
                 icon={<Tag color={memoFilterMode === "untagged" ? "#ffffff" : "#475569"} size={18} />}
                 label="无标签"
-                onPress={() => onFilterModeChange(memoFilterMode === "untagged" ? "all" : "untagged")}
+                onPress={() => onFilterModeChange(toggleMobileMemoFilterMode(memoFilterMode, "untagged"))}
               />
           </View>
-          {searchActive ? (
-            <View accessibilityLiveRegion="polite" style={styles.mobileListConstraint}>
-              <View style={styles.mobileSearchStatusPill}>
-                <Search color="#ffffff" size={12} />
-                <Text style={styles.mobileSearchStatusPillText}>{searchStatusLabel}</Text>
-              </View>
-              <Text numberOfLines={1} style={styles.mobileListConstraintText}>{searchResultLabel}</Text>
-              <Pressable accessibilityLabel={exitSearchLabel} accessibilityRole="button" onPress={() => onSearchTextChange("")}>
-                <Text style={styles.mobileListConstraintAction}>{exitSearchLabel}</Text>
+          {searchActive || filterActive ? (
+            <View accessibilityLiveRegion="polite" style={[styles.mobileListConstraint, !searchActive && styles.mobileListConstraintFilter]}>
+              {searchActive ? (
+                <View style={styles.mobileSearchStatusPill}>
+                  <Search color="#ffffff" size={12} />
+                  <Text style={styles.mobileSearchStatusPillText}>{searchStatusLabel}</Text>
+                </View>
+              ) : null}
+              <Text numberOfLines={1} style={[styles.mobileListConstraintText, !searchActive && styles.mobileListConstraintTextFilter]}>
+                {searchActive ? searchResultLabel : filterResultLabel}
+              </Text>
+              <Pressable
+                accessibilityLabel={searchActive ? exitSearchLabel : resetFilterLabel}
+                accessibilityRole="button"
+                onPress={searchActive ? () => onSearchTextChange("") : () => onFilterModeChange("all")}
+              >
+                <Text style={[styles.mobileListConstraintAction, !searchActive && styles.mobileListConstraintActionFilter]}>
+                  {searchActive ? exitSearchLabel : resetFilterLabel}
+                </Text>
               </Pressable>
             </View>
           ) : null}
@@ -4995,7 +5016,7 @@ const MemoCard = memo(function MemoCard({
         </View>
         {listDensity === "preview" ? (
           <Text numberOfLines={2} style={styles.memoExcerpt}>
-            {memo.excerpt || "没有正文预览"}
+            {memo.excerpt || "空笔记"}
           </Text>
         ) : null}
         <View style={[styles.memoMeta, listDensity === "compact" && styles.memoMetaCompact]}>
@@ -6103,14 +6124,14 @@ const baseWorkspaceStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
-    minHeight: 36,
+    minHeight: MOBILE_UI_METRICS.compactControlHeight,
   },
   mobileNotebookTitleButton: {
     alignItems: "center",
     flexDirection: "row",
     flexShrink: 1,
     gap: 4,
-    minHeight: 36,
+    minHeight: MOBILE_UI_METRICS.compactControlHeight,
     paddingRight: 12,
   },
   mobileNotebookTitle: {
@@ -6121,10 +6142,10 @@ const baseWorkspaceStyles = StyleSheet.create({
   },
   mobileMoreButton: {
     alignItems: "center",
-    borderRadius: 18,
-    height: 36,
+    borderRadius: MOBILE_UI_METRICS.compactControlHeight / 2,
+    height: MOBILE_UI_METRICS.compactControlHeight,
     justifyContent: "center",
-    width: 36,
+    width: MOBILE_UI_METRICS.compactControlHeight,
   },
   mobileSearchRow: {
     alignItems: "center",
@@ -6135,12 +6156,12 @@ const baseWorkspaceStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#f1f5f9",
     borderColor: "transparent",
-    borderRadius: 18,
+    borderRadius: MOBILE_UI_METRICS.compactControlHeight / 2,
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",
     gap: 8,
-    height: 36,
+    height: MOBILE_UI_METRICS.compactControlHeight,
     paddingHorizontal: 12,
   },
   mobileSearchButtonActive: {
@@ -6154,7 +6175,7 @@ const baseWorkspaceStyles = StyleSheet.create({
     color: "#0f172a",
     flex: 1,
     fontSize: 14,
-    height: 36,
+    height: MOBILE_UI_METRICS.compactControlHeight,
     paddingVertical: 0,
   },
   mobileSearchInputActiveDark: {
@@ -6181,6 +6202,12 @@ const baseWorkspaceStyles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
+  mobileListConstraintFilter: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+    borderLeftColor: "#e2e8f0",
+    borderLeftWidth: 1,
+  },
   mobileSearchStatusPill: {
     alignItems: "center",
     backgroundColor: "#059669",
@@ -6201,20 +6228,26 @@ const baseWorkspaceStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  mobileListConstraintTextFilter: {
+    color: "#64748b",
+  },
   mobileListConstraintAction: {
     color: "#065f46",
     fontSize: 12,
     fontWeight: "700",
   },
+  mobileListConstraintActionFilter: {
+    color: "#475569",
+  },
   mobileFilterButton: {
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderColor: "#e2e8f0",
-    borderRadius: 18,
+    borderRadius: MOBILE_UI_METRICS.compactControlHeight / 2,
     borderWidth: 1,
-    height: 36,
+    height: MOBILE_UI_METRICS.compactControlHeight,
     justifyContent: "center",
-    width: 36,
+    width: MOBILE_UI_METRICS.compactControlHeight,
   },
   mobileFilterButtonActive: {
     backgroundColor: "#334155",
@@ -6991,7 +7024,7 @@ const baseWorkspaceStyles = StyleSheet.create({
   },
   listActionSheet: {
     backgroundColor: "#ffffff",
-    borderRadius: 10,
+    borderRadius: MOBILE_UI_METRICS.floatingSheetCornerRadius,
     marginHorizontal: 12,
     maxHeight: "82%",
     overflow: "hidden",
@@ -7903,16 +7936,16 @@ const baseWorkspaceStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#10b981",
     borderColor: "#ffffff",
-    borderRadius: 26,
+    borderRadius: MOBILE_UI_METRICS.floatingCreateButtonSize / 2,
     borderWidth: 4,
-    height: 52,
+    height: MOBILE_UI_METRICS.floatingCreateButtonSize,
     justifyContent: "center",
     marginTop: -16,
     shadowColor: "#10b981",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 18,
-    width: 52,
+    width: MOBILE_UI_METRICS.floatingCreateButtonSize,
   },
   bottomCreateButtonDisabled: {
     backgroundColor: "#cbd5e1",
@@ -7951,6 +7984,7 @@ const baseWorkspaceStyles = StyleSheet.create({
   bottomNavItem: {
     alignItems: "center",
     gap: 4,
+    minHeight: MOBILE_UI_METRICS.minimumTouchTarget,
     minWidth: 58,
   },
   bottomNavText: {

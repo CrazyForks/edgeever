@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./i18n": "./src/i18n/index.ts"
+    "./i18n": "./src/i18n/index.ts",
+    "./mobile-ui": "./src/mobile-ui.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
