@@ -77,6 +77,8 @@ Agent 应优先按 [AI Agent Cloudflare Deployment](docs/agent-deploy-cloudflare
 
 推荐优先使用自动化辅助命令。配置模板使用 `admin` / `admin123` 作为初始登录账号密码，之后可在个人设置中修改密码。如果选择完全手动创建 Cloudflare 资源，必须先在 `.env.local` 中完成 D1 ID、R2 bucket 和 400 天会话期限等配置，再执行 `bun run deploy`。
 
+生产部署采用安全关闭策略：D1 未迁移或登录 Secret 缺失时，实例会显示可诊断的配置错误并拒绝访问，不会自动退化成免登录模式。请勿直接向 D1 写入明文密码；故障恢复命令见手动部署指南。
+
 
 ## 多账号登录
 

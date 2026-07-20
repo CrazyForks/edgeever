@@ -80,6 +80,8 @@ Please refer to the [Cloudflare Manual Deployment Guide](docs/manual-deploy.md) 
 
 The automated helper commands are recommended. The template uses `admin` / `admin123` for the initial login, and the password can be changed later in Personal Settings. If you create the Cloudflare resources manually, finish configuring `.env.local`—including the D1 ID, R2 bucket, and the 400-day session limit—before running `bun run deploy`.
 
+Production deployments fail closed: when D1 migrations or the login Secret are missing, the instance shows a diagnosable configuration error and denies access instead of falling back to an unauthenticated workspace. Never insert plaintext passwords into D1; use the recovery command documented in the manual deployment guide.
+
 
 ## Multi-Account Login
 

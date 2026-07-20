@@ -43,9 +43,10 @@
     "mcp:stdio": "bun scripts/edgeever-mcp-stdio.mjs",
     "deploy:doctor": "bun scripts/cloudflare-deploy.mjs doctor",
     "deploy:setup": "bun scripts/cloudflare-deploy.mjs setup",
-    "deploy": "bun run build && bun run deploy:worker",
+    "deploy": "bun run deploy:doctor && bun run build && bun run deploy:worker",
     "deploy:worker": "bun run deploy:cloudflare-builds",
-    "deploy:cloudflare-builds": "bun run db:migrate:remote && bun scripts/run-wrangler.mjs deploy",
+    "deploy:cloudflare-builds": "bun run db:migrate:remote && bun scripts/run-wrangler.mjs deploy && bun run deploy:verify",
+    "deploy:verify": "bun scripts/verify-deployment.mjs",
     "deploy:builds:setup": "bun scripts/cloudflare-workers-builds.mjs setup",
     "deploy:site": "bun run build:site && wrangler pages deploy apps/site/dist --project-name=edgeever-official"
   },

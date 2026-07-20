@@ -35,6 +35,8 @@
 
    如果希望首次登录就使用自定义密码，可改为执行 `EDGE_EVER_PASSWORD='<你的密码>' bun run deploy:setup`。部署成功后也可以在个人中心修改密码。
 
+   `deploy:setup` 始终直接使用项目内安装的 Wrangler，不要求全局安装 `wrangler`，并兼容 PowerShell、CMD 与 Git Bash。若尚未授权 Cloudflare，该命令会自动启动 `wrangler login`；浏览器没有自动打开时，请复制终端显示的授权链接到浏览器完成登录，然后保持命令运行到验证结束。
+
 ### 完全手动创建 Cloudflare 资源
 
 如果你不想使用 `deploy:setup` 自动化脚本，也可以完全手动使用 Cloudflare CLI (Wrangler) 创建资源：
@@ -65,7 +67,26 @@ bun run deploy
 
 `bun run deploy` 会构建 Web 应用、执行远程 D1 migration、部署 Worker，并将 `EDGE_EVER_AUTH_PASSWORD` 作为 Worker Secret 上传。首次登录成功后，EdgeEver 会将加盐的 PBKDF2-SHA256 哈希写入 D1。已有实例可以继续使用 `EDGE_EVER_AUTH_PASSWORD_HASH`；两个 Secret 同时存在时优先使用哈希。部署完成后，请使用 `.env.local` 中的 `EDGE_EVER_AUTH_USERNAME` 和配置的密码登录验证。
 
+`.env.local` 只供本机 EdgeEver 脚本读取，不会作为文件自动上传到 Cloudflare，也不应手工上传或提交到 Git。若从 Cloudflare Dashboard 直接触发构建，该文件中的 D1、R2 和密码配置不会自动生效；请使用 `bun run deploy` 完成首次部署，再使用 `bun run deploy:builds:setup` 将必要配置安全地写入 Workers Builds。
+
+部署命令会先自动执行 `deploy:doctor`，缺少 D1 ID、R2 bucket 或登录密码时会直接停止。部署完成后还会执行 `deploy:verify`，检查远程 D1 的关键数据表和 Worker 鉴权 Secret；任一缺失都会让部署以失败退出。Worker 也采用安全关闭策略：生产实例既没有密码 Secret、又没有有效用户时，会返回 `auth_not_configured`，不会降级成免登录工作区。`/api/health` 会检查 D1 和鉴权初始化状态；只有返回 `200` 且包含 `"ok": true` 才表示实例真正可用。
+
 已有实例无需迁移。如果确实要从哈希配置切换为 `EDGE_EVER_AUTH_PASSWORD`，需要同时从 `.env.local`、Workers Builds 和 Worker 运行时 Secrets 中移除旧的 `EDGE_EVER_AUTH_PASSWORD_HASH`，否则旧哈希仍会优先生效。
+
+### 登录或数据库初始化故障恢复
+
+- 登录页显示“数据库尚未就绪”或接口返回 `database_not_ready`：确认 D1 binding 名称严格为 `DB`，然后执行 `bun run db:migrate:remote && bun run deploy`。
+- 登录页显示“实例尚未完成安全配置”或接口返回 `auth_not_configured`：在 `.env.local` 配置 `EDGE_EVER_AUTH_PASSWORD`，然后执行 `bun run deploy`。不要通过清空账号配置绕过登录。
+- 已经手工向 `users` 表写入账号密码：不要向 `password_hash` 写明文。EdgeEver 会拒绝无效哈希并在登录页提示安全恢复命令，请执行：
+
+  ```sh
+  EDGE_EVER_PASSWORD='<至少 8 位的新密码>' \
+    bun run auth:reset-password -- --remote --username admin
+  ```
+
+  该命令会生成兼容的 PBKDF2-SHA256 哈希并撤销该账号的旧会话，不会删除笔记数据。
+
+Cloudflare 控制台中的 binding 名称必须严格使用 `DB`（D1）和 `RESOURCES`（R2）。普通变量 `EDGE_EVER_AUTH_USERNAME` 不能代替加密 Secret `EDGE_EVER_AUTH_PASSWORD`。
 
 ---
 

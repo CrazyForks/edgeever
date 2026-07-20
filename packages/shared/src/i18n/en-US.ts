@@ -43,6 +43,10 @@ export const enUS = {
     password: "Password",
     submitting: "Signing in...",
     submit: "Open workspace",
+    authNotConfigured: "This instance has not completed its security setup. Set EDGE_EVER_AUTH_PASSWORD as a Worker Secret and redeploy. Unauthenticated access stays blocked until it is fixed.",
+    databaseNotReady: "The database is not ready. Verify that the D1 binding is named DB, apply the remote migrations, and redeploy.",
+    instanceUnavailable: "This instance is temporarily unavailable. Check the Worker logs and run bun run deploy:doctor to validate the deployment.",
+    passwordHashInvalid: "This account's password data is invalid; plaintext passwords are not supported. Follow the deployment guide and run auth:reset-password to reset it safely.",
   },
   nav: {
     mobileMain: "Mobile primary navigation",

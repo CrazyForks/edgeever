@@ -35,6 +35,8 @@ If you are comfortable with Cloudflare and the command line, or prefer customize
 
    To use a custom first-login password, run `EDGE_EVER_PASSWORD='<your password>' bun run deploy:setup` instead. You can also change the password later in Personal Settings.
 
+   `deploy:setup` always invokes the project-local Wrangler directly, so a global `wrangler` installation is not required and PowerShell, CMD, and Git Bash are supported. If Cloudflare is not authorized yet, the command starts `wrangler login` automatically. If the browser does not open, copy the authorization URL printed in the terminal into a browser and leave the command running until verification completes.
+
 ### Creating Cloudflare Resources Manually
 
 If you prefer not to use the automated `deploy:setup` helper, you can create the resources manually using Cloudflare CLI (Wrangler):
@@ -65,7 +67,26 @@ Before running `bun run deploy`, copy the D1 `database_id` and R2 bucket name in
 
 `bun run deploy` builds the web app, applies remote D1 migrations, deploys the Worker, and uploads `EDGE_EVER_AUTH_PASSWORD` as a Worker Secret. After the first successful login, EdgeEver stores a salted PBKDF2-SHA256 hash in D1. Existing installations may continue to use `EDGE_EVER_AUTH_PASSWORD_HASH`; when both Secrets are set, the hash takes precedence. Verify the deployment by signing in with `EDGE_EVER_AUTH_USERNAME` and the configured password.
 
+`.env.local` is read only by the local EdgeEver scripts. It is not automatically uploaded to Cloudflare as a file, and it must never be uploaded manually or committed to Git. A build started directly from Cloudflare Dashboard does not automatically receive the D1, R2, or password settings in this file. Use `bun run deploy` for the first deployment, then use `bun run deploy:builds:setup` to copy the required settings securely into Workers Builds.
+
+The deployment command now runs `deploy:doctor` first and stops when the D1 ID, R2 bucket, or login password is missing. After deployment, `deploy:verify` checks the remote D1 schema and the Worker's authentication Secret; a missing requirement makes deployment exit as failed. The Worker also fails closed: when a production instance has neither a password Secret nor an enabled user, it returns `auth_not_configured` instead of opening an unauthenticated workspace. `/api/health` checks D1 and authentication initialization; the instance is ready only when it returns `200` with `"ok": true`.
+
 Existing installations do not need to migrate. If you intentionally switch from the hash setting to `EDGE_EVER_AUTH_PASSWORD`, remove the old `EDGE_EVER_AUTH_PASSWORD_HASH` from `.env.local`, Workers Builds, and the Worker's runtime Secrets; otherwise the legacy hash remains authoritative.
+
+### Recovering login or database initialization failures
+
+- If the login page says the database is not ready, or the API returns `database_not_ready`, verify that the D1 binding is named exactly `DB`, then run `bun run db:migrate:remote && bun run deploy`.
+- If the login page says the security setup is incomplete, or the API returns `auth_not_configured`, configure `EDGE_EVER_AUTH_PASSWORD` in `.env.local`, then run `bun run deploy`. Never clear the account settings to bypass login.
+- If credentials were inserted into the `users` table manually, do not put plaintext in `password_hash`. EdgeEver rejects invalid hashes and points to the safe recovery command on the login page. Run:
+
+  ```sh
+  EDGE_EVER_PASSWORD='<new password of at least 8 characters>' \
+    bun run auth:reset-password -- --remote --username admin
+  ```
+
+  This command creates a compatible PBKDF2-SHA256 hash and revokes the account's old sessions without deleting note data.
+
+Cloudflare binding names must be exactly `DB` for D1 and `RESOURCES` for R2. The plain variable `EDGE_EVER_AUTH_USERNAME` does not replace the encrypted `EDGE_EVER_AUTH_PASSWORD` Secret.
 
 ---
 

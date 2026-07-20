@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { runWranglerSync } from "./wrangler-runner.mjs";
 
 const PLACEHOLDER_D1_ID = "00000000-0000-0000-0000-000000000000";
 const UUID_PATTERN =
@@ -95,6 +95,11 @@ const envValue = (name) => {
     || process.env[`EDGE_EVER_${name}`]?.trim();
 };
 
+const isRemoteCommand =
+  wranglerArgs.includes("deploy") || wranglerArgs.includes("--remote");
+const isRemoteDevCommand = wranglerArgs.includes("dev") && wranglerArgs.includes("--remote");
+const isLocalDevCommand = wranglerArgs.includes("dev") && wranglerArgs.includes("--local");
+
 const workerName = envValue("WORKER_NAME");
 if (workerName) {
   config = replaceTomlValue(config, "name", workerName);
@@ -139,6 +144,9 @@ const runtimeVars = {
   EDGE_EVER_R2_BUCKET_NAME: envValue("R2_BUCKET_NAME"),
   EDGE_EVER_DEMO_MODE: envValue("DEMO_MODE"),
   EDGE_EVER_LOCAL_DEMO_SEED: envValue("LOCAL_DEMO_SEED"),
+  // Auth-free access is a local-development capability. Remote deployments
+  // fail closed when credentials and users are both missing.
+  EDGE_EVER_ALLOW_UNAUTHENTICATED: isLocalDevCommand ? "true" : undefined,
 };
 const runtimeVarLines = Object.entries(runtimeVars)
   .filter(([, value]) => Boolean(value))
@@ -185,11 +193,6 @@ custom_domain = ${customDomain ? "true" : "false"}
 `;
 }
 
-const isRemoteCommand =
-  wranglerArgs.includes("deploy") || wranglerArgs.includes("--remote");
-const isRemoteDevCommand = wranglerArgs.includes("dev") && wranglerArgs.includes("--remote");
-const isLocalDevCommand = wranglerArgs.includes("dev") && wranglerArgs.includes("--local");
-
 if (isRemoteDevCommand && !instance) {
   console.error(
     "Remote development requires an explicit instance. Run EDGE_EVER_INSTANCE=<name> bun run dev:remote.",
@@ -226,6 +229,13 @@ const authSecrets = {
 };
 const finalWranglerArgs = [...wranglerArgs];
 
+if (isDeployCommand && Object.keys(authSecrets).length === 0) {
+  console.error(
+    "Refusing to deploy without EDGE_EVER_AUTH_PASSWORD or EDGE_EVER_AUTH_PASSWORD_HASH. Run bun run deploy:setup first.",
+  );
+  process.exit(1);
+}
+
 if (isLocalDevCommand && !hasEnvFileArg) {
   writeFileSync(generatedLocalDevEnvPath, "# Intentionally empty: local development must not inherit remote instance secrets.\n");
   finalWranglerArgs.push("--env-file", generatedLocalDevEnvPath);
@@ -236,32 +246,20 @@ if (isDeployCommand && Object.keys(authSecrets).length > 0 && !hasSecretsFileArg
   finalWranglerArgs.push("--secrets-file", generatedSecretsPath);
 }
 
-const localWrangler = resolve(
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "wrangler.cmd" : "wrangler",
-);
-const executable = existsSync(localWrangler)
-  ? localWrangler
-  : process.platform === "win32"
-    ? "wrangler.cmd"
-    : "wrangler";
-const result = spawnSync(executable, ["--config", configPath, ...finalWranglerArgs], {
+const result = runWranglerSync(["--config", configPath, ...finalWranglerArgs], {
+  cwd: resolve("."),
+  env: process.env,
   stdio: "inherit",
-  shell: process.platform === "win32",
 });
 
 if (result.status === 0 && isDeployCommand) {
   for (const [secretName, secretValue] of Object.entries(authSecrets)) {
-    const secretResult = spawnSync(
-      executable,
-      ["--config", configPath, "secret", "put", secretName],
-      {
-        input: secretValue,
-        stdio: ["pipe", "inherit", "inherit"],
-        shell: process.platform === "win32",
-      },
-    );
+    const secretResult = runWranglerSync(["--config", configPath, "secret", "put", secretName], {
+      cwd: resolve("."),
+      env: process.env,
+      input: secretValue,
+      stdio: ["pipe", "inherit", "inherit"],
+    });
 
     if (secretResult.error) {
       throw secretResult.error;

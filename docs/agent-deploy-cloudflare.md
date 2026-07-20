@@ -24,7 +24,7 @@ If the user supplied a custom initial password, replace the first command with:
 EDGE_EVER_PASSWORD='<first-login-password>' bun run deploy:setup
 ```
 
-Do not deploy until `deploy:doctor` passes. After deployment, verify the Worker URL, `/api/openapi.json`, and login. The default initial login is `admin` / `admin123`.
+Do not deploy until `deploy:doctor` passes. After deployment, verify that `/api/health` returns `200` with `"ok": true`, then verify `/api/openapi.json` and login. A `database_not_ready` or `auth_not_configured` response means deployment is incomplete and must not be handed off as successful. The default initial login is `admin` / `admin123`.
 
 ## Automatic Updates
 
